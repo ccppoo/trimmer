@@ -1,0 +1,110 @@
+options:
+  input:
+    dest:
+      - -I
+      - --input_file
+    type:
+      str
+    default:
+      null
+    help:
+      the video file you want modified
+
+  url:
+    dest:
+      - -U
+      - --url
+    type:
+      str
+    default:
+      null
+    help:
+      A youtube url to download and process
+
+  output:
+    dest:
+      - -O
+      - --output_file
+    type:
+      str
+    default:
+      null
+    help:
+      the output file. (optional. if not included, it'll just modify the input file name)
+
+  slient_threshold:
+    dest:
+      - -S
+      - --silent_threshold
+    type:
+      float
+    default:
+      0.03
+    help:
+      the volume amount that frames' audio needs to surpass to be consider \"sounded\". It ranges from 0 (silence) to 1 (max volume)
+
+  sounded_speed:
+    dest:
+      - -P
+      - --sounded_speed
+    type:
+      float
+    default:
+      1.00
+    help:
+      the speed that sounded (spoken) frames should be played at. Typically 1.
+
+  slient_speed:
+    dest:
+      - -E
+      - --silent_speed
+    type:
+      float
+    default:
+      5.00
+    help:
+      the speed that silent frames should be played at. 999999 for jumpcutting.
+
+  frame_margin:
+    dest:
+      - -F
+      - --frame_margin
+    type:
+      float
+    default:
+      1.0
+    help:
+      some silent frames adjacent to sounded frames are included to provide context. How many frames on either the side of speech should be included? That's this variable.
+  
+  sample_rate:
+    dest:
+      - -R
+      - --sample_rate
+    type:
+      float
+    default:
+      44100.0
+    help:
+      sample rate of the input and output videos
+
+  frame_rate:
+    dest:
+      - -T
+      - --frame_rate
+    type:
+      float
+    default:
+      30.0
+    help:
+      frame rate of the input and output videos. optional... I try to find it out myself, but it doesn't always work.
+
+  frame_quality:
+    dest:
+      - -Q
+      - --frame_quality
+    type:
+      int
+    default:
+      3
+    help:
+      quality of frames to be extracted from input video. 1 is highest, 31 is lowest, 3 is the default.
