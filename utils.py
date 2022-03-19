@@ -3,6 +3,9 @@ from os import getcwd, path
 import os, sys
 import pathlib
 import yaml
+import datetime
+import shutil
+import requests
 
 '''
 subprocess로 경로 넘길 떄는 raw string 으로 반환해야한다!!!!!!!!
@@ -10,17 +13,34 @@ subprocess로 경로 넘길 떄는 raw string 으로 반환해야한다!!!!!!!!
 '''
 
 OS = sys.platform
+DEFAULT_CHANGED_NAME = "_modified"
 
 __all__ = [
     "OS",
+    "make_process",
     "open_yaml",
+    "get_workspace_name",
+    "make_workspace",
     "reflectIncrement",
     "resolve_full_path",
     "get_date",
-    "resolve_relative_path"
+    "deletePath",
+    "resolve_relative_path",
+    "get_video_output_path",
+    "validate_url"
 ]
 
 yaml_suffix = ['yaml', 'yml']
+
+def make_process(*args):
+    # TODO : 
+    '''
+    usage is same as subprocess.call/run/Popen some commands are changed
+    UNIX : 'ls' <--> win32 'dir'
+    and file paths are changed again fulfilling OS types 
+    '''
+
+    return ' '.join([str(arg) for arg in args])
 
 def open_yaml(path_to_yaml : str) -> dict:
     
@@ -66,8 +86,43 @@ def get_date() -> str:
     Returns:
         example : 2022-04-12
     """
-    import datetime
+    
     return datetime.datetime.now().strftime("%Y-%m-%d")
+
+def get_workspace_name(path_ : os.PathLike) -> pathlib.Path:
+    '''
+    디렉토리 만드는게 아니라 이름 만들어주는 함수임
+
+    작업 할 영상 만들 폴더를 만들고
+    이름이 중복(같은 이름을 가진 영상의 경우)되면 숫자 encrement
+    폴더 경로 반환하는 것
+    '''
+    dir = dirname if (dirname := os.path.dirname(path_)) else os.getcwd()
+
+    if not os.path.isdir(path_):
+        return pathlib.Path(dir, path_)
+
+    if os.path.exists(path_):
+        return pathlib.Path(dir, reflectIncrement(path_))
+        
+    return pathlib.Path(dir, path_)
+
+def make_workspace(path_ : pathlib.Path) -> pathlib.Path:
+    
+    try:
+        os.mkdir(path = path_)
+
+    except Exception as e:
+        # 아마도 OS 에러
+        path_ = str(path_)
+        err_msg  = f"Error while making directory : {path_}\n"
+        err_msg += f"dir : {os.path.dirname(path_)}"
+        err_msg += f"basename : {os.path.basename(path_)}"
+        err_msg += "=== trace back ===\n\n"
+        err_msg += e
+        raise Exception(err_msg)
+    
+    return path_
 
 def reflectIncrement(base : os.PathLike, in_folder: os.PathLike = None) -> pathlib.Path:
     '''
@@ -100,6 +155,42 @@ def reflectIncrement(base : os.PathLike, in_folder: os.PathLike = None) -> pathl
             return pathlib.Path(base_dir, f"{base}({n})")
 
     return pathlib.Path(base_dir+f"({n})")
+
+def deletePath(s): # Dangerous! Watch out!
+    
+    if OS:
+        pass
+    
+    try:
+        shutil.rmtree(s,ignore_errors=False)
+    except OSError:  
+        print ("Deletion of the directory %s failed" % s)
+        print(OSError)
+
+def validate_url(url) -> bool:
+    
+    try:
+        requests.get(url)
+    except requests.ConnectionError as exception:
+        return False
+    else:
+        return True
+
+def get_video_output_path(output_path : os.PathLike, source_path : os.PathLike) -> os.PathLike:
+
+    if not output_path:
+        src_dir = os.path.dirname(source_path)
+        src = os.path.basename(source_path)
+        filename, ext = src.split('.')[:-1], src.split('.')[-1]
+        # in case of file name having dot in names like "my.video.mkv"
+        filename = filename[0] if len(filename) > 1 else '.'.join(filename)
+        filename = f"{filename + DEFAULT_CHANGED_NAME}.{ext}"
+        return reflectIncrement(filename, src_dir)
+
+    if os.path.exists(output_path):
+        raise Exception(f"\nfile already exists : {output_path}")
+
+    return pathlib.Path(output_path)
 
 def resolve_full_path(path_ : str) -> str:
     pass

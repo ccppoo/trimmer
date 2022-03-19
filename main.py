@@ -1,9 +1,4 @@
-from argparse import Namespace
-from contextlib import closing
 import pathlib
-from typing import Union
-from PIL import Image
-import requests
 import subprocess
 from audiotsm import phasevocoder
 from audiotsm.io.wav import WavReader, WavWriter
@@ -11,183 +6,17 @@ from scipy.io import wavfile
 import numpy as np
 import re
 import math
-import shutil
-
-import os
-from pytube import YouTube
 
 from utils import *
 from codecs_config import *
 from args_parsing import get_args
+from youtube_stuffs import *
+from ffmpeg_stuffs import *
+from video_source import get_video_source
 
 TEMP = "TEMP"
-DEFAULT_CHANGED_NAME = "_modified"
 
-def download_from_Youtube(url) -> os.PathLike :
-    '''
-    다운로드한 영상의 제목을 가진 폴더 내부에 작업 시작
-
-    같은 이름을 가진 영상의 경우 지금은 일단 구분 안함 (나중에 채널 이름별로 분류할지는 모름)
-    '''
-
-    # 화질 문제있음 --> 고화질로 다운 받는 방법?
-    name = YouTube(url).streams.first().download() # returns full path
-    newname = reflectIncrement(name.replace(' ','_'))
-    
-    os.rename(name, newname)
-
-    return newname
-
-def getMaxVolume(s):
-    maxv = float(np.max(s))
-    minv = float(np.min(s))
-    return max(maxv,-minv)
-
-def copyFrame(inputFrame,outputFrame):
-    src = TEMP_FOLDER+"/frame{:06d}".format(inputFrame+1)+".jpg"
-    dst = TEMP_FOLDER+"/newFrame{:06d}".format(outputFrame+1)+".jpg"
-    
-    if not os.path.isfile(src):
-        return False
-    
-    shutil.copyfile(src, dst)
-    
-    if outputFrame%20 == 19:
-        print(str(outputFrame+1)+" time-altered frames saved.")
-    
-    return True
-
-
-def is_temp(path_) -> bool:
-    if os.path.exists(path_) and os.path.basename(path_).find(TEMP) > -1:
-        return True
-    return False
-    
-
-def get_workspace_name(path_ : os.PathLike) -> pathlib.Path:
-    '''
-    디렉토리 만드는게 아니라 이름 만들어주는 함수임
-
-    작업 할 영상 만들 폴더를 만들고
-    이름이 중복(같은 이름을 가진 영상의 경우)되면 숫자 encrement
-    폴더 경로 반환하는 것
-    '''
-
-    dir = dirname if (dirname := os.path.dirname(path_)) else os.getcwd()
-
-    if not os.path.isdir(path_):
-        return pathlib.Path(dir, path_)
-
-    if os.path.exists(path_):
-        return pathlib.Path(dir, reflectIncrement(path_))
-        
-    return pathlib.Path(dir, path_)
-
-def make_workspace(path_ : pathlib.Path) -> pathlib.Path:
-    
-    try:
-        os.mkdir(path = path_)
-
-    except Exception as e:
-        # 아마도 OS 에러
-        path_ = str(path_)
-        err_msg  = f"Error while making directory : {path_}\n"
-        err_msg += f"dir : {os.path.dirname(path_)}"
-        err_msg += f"basename : {os.path.basename(path_)}"
-        err_msg += "=== trace back ===\n\n"
-        err_msg += e
-        raise Exception(err_msg)
-    
-    return path_
-
-def config_directory(s):
-    '''
-    파일을 저장할 위치 구성
-    '''
-    #assert (not os.path.exists(s)), "The filepath "+s+" already exists. Don't want to overwrite it. Aborting."
-
-    if os.path.exists(s):
-        pass
-
-    try:  
-        os.mkdir(s)
-
-    except OSError:
-        assert False, "Creation of the directory %s failed. (The TEMP folder may already exist. Delete or rename it, and try again.)"
-
-def deletePath(s): # Dangerous! Watch out!
-    
-    if OS:
-        pass
-    
-    try:
-        shutil.rmtree(s,ignore_errors=False)
-    except OSError:  
-        print ("Deletion of the directory %s failed" % s)
-        print(OSError)
-
-def validate_url(url) -> bool:
-    
-    try:
-        requests.get(url)
-    except requests.ConnectionError as exception:
-        return False
-    else:
-        return True
-
-def get_video_source(url = None, local_file : os.PathLike = None) -> os.PathLike:
-
-    if not any([url, local_file]):
-        raise ValueError("no input file or youtube URL source provided")
-    
-    if all([url, local_file]):
-        raise ValueError("You should put choose from one source 'URL' or 'Local file'")
-
-    if url:
-        if not validate_url(url):
-            raise ValueError(f"\nThis is not a valid URL : {url}")
-        source_path = download_from_Youtube(url)
-    
-    if local_file:
-        dir_path = dir_path if (dir_path := os.path.dirname(local_file)) else os.getcwd() 
-        base_path = os.path.basename(local_file)
-
-        if not os.path.isfile(local_file):
-            raise ValueError(f"\nThis is not a valid File : {pathlib.Path(dir_path, base_path)}")
-    
-        source_path = pathlib.Path(dir_path, base_path)
-
-    return source_path
-
-def get_video_output_path(output_path : os.PathLike, source_path : os.PathLike) -> os.PathLike:
-
-    if not output_path:
-        src_dir = os.path.dirname(source_path)
-        src = os.path.basename(source_path)
-        filename, ext = src.split('.')[:-1], src.split('.')[-1]
-        # in case of file name having dot in names like "my.video.mkv"
-        filename = filename[0] if len(filename) > 1 else '.'.join(filename)
-        filename = f"{filename + DEFAULT_CHANGED_NAME}.{ext}"
-        return reflectIncrement(filename, src_dir)
-
-    if os.path.exists(output_path):
-        raise Exception(f"\nfile already exists : {output_path}")
-
-    return pathlib.Path(output_path)
-
-def make_process(*args):
-    # TODO : 
-    '''
-    usage is same as subprocess.call/run/Popen some commands are changed
-    UNIX : 'ls' <--> win32 'dir'
-    and file paths are changed again fulfilling OS types 
-    '''
-
-    return ' '.join([str(arg) for arg in args])
-
-
-if __name__ == '__main__':
-
+def main():
     args = get_args()
 
     ############ Setting globals ############
@@ -491,12 +320,12 @@ if __name__ == '__main__':
             inputFrame = int(chunk[0] + NEW_SPEED[int(chunk[2])]*(outputFrame-startOutputFrame) )
 
             # 영상에 보일 새로운 프레임(이미지) 복사함
-            didItWork = copyFrame(inputFrame,outputFrame)
+            didItWork = copyFrame(inputFrame,outputFrame, TEMP_FOLDER)
 
             if didItWork:
                 lastExistingFrame = inputFrame
             else:
-                copyFrame(lastExistingFrame,outputFrame)
+                copyFrame(lastExistingFrame,outputFrame, TEMP_FOLDER)
 
         # 다음 프레임 위치 재조정
         outputPointer = endPointer
@@ -507,7 +336,7 @@ if __name__ == '__main__':
     '''
     outputFrame = math.ceil(outputPointer/samplesPerFrame)
     for endGap in range(outputFrame,audioFrameCount):
-        copyFrame(int(audioSampleCount/samplesPerFrame)-1,endGap)
+        copyFrame(int(audioSampleCount/samplesPerFrame)-1,endGap, TEMP_FOLDER)
     '''
 
     """
@@ -520,7 +349,9 @@ if __name__ == '__main__':
 
     잘라낸 화면이랑 소리를 합치는 명령어
 
-    영상 길이(초) * framerate(30fps) * (소리 샘플링 개수) = (audioNew.wav 시간) * (소리 샘플링 개수)
+    영상 길이(초) * framerate(30fps) * (한 프레임에 들어갈 소리 샘플링 개수) 
+        == 
+            (audioNew.wav 시간) * (모든 소리 샘플링 개수)
     """
     processtr = make_process(
         "ffmpeg", "-framerate", str(frameRate), "-i", 
@@ -531,3 +362,6 @@ if __name__ == '__main__':
     subprocess.call(processtr, shell=False)
 
     # deletePath(TEMP_FOLDER)
+
+if __name__ == '__main__':
+    main()
