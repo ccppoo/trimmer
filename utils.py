@@ -19,6 +19,7 @@ __all__ = [
     "OS",
     "make_process",
     "open_yaml",
+    "make_directory",
     "get_workspace_name",
     "make_workspace",
     "reflectIncrement",
@@ -89,6 +90,12 @@ def get_date() -> str:
     
     return datetime.datetime.now().strftime("%Y-%m-%d")
 
+def make_directory(path_ : os.PathLike) -> bool:
+    if not os.path.exists(path_):
+        os.mkdir(path_)
+        return True
+    return False
+
 def get_workspace_name(path_ : os.PathLike) -> pathlib.Path:
     '''
     디렉토리 만드는게 아니라 이름 만들어주는 함수임
@@ -97,14 +104,25 @@ def get_workspace_name(path_ : os.PathLike) -> pathlib.Path:
     이름이 중복(같은 이름을 가진 영상의 경우)되면 숫자 encrement
     폴더 경로 반환하는 것
     '''
-    dir = dirname if (dirname := os.path.dirname(path_)) else os.getcwd()
+    # path_ = str(pathlib.Path("TEMP", path_))
 
-    if not os.path.isdir(path_):
-        return pathlib.Path(dir, path_)
+    dir = dirname if (dirname := os.path.dirname(path_)) else pathlib.Path(os.getcwd(), "TEMP")
+    dir = str(dir)
+    print(f"{dir=}")
+    print(f"{path_=}")
+    full_path = pathlib.Path(dir, path_)
 
-    if os.path.exists(path_):
-        return pathlib.Path(dir, reflectIncrement(path_))
-        
+    if not os.path.isdir(str(full_path)):
+        print("씨빨!!!!!!! 1111111111111111111")
+        return full_path
+
+    if os.path.exists(str(full_path)):
+        print("씨빨!!!!!!! 2222222222222222222222222222222")
+
+        print(f"{reflectIncrement(path_, dir)=}")
+        return pathlib.Path(dir, reflectIncrement(path_, dir))
+    
+    print("씨빨!!!!!!! 33333333333")
     return pathlib.Path(dir, path_)
 
 def make_workspace(path_ : pathlib.Path) -> pathlib.Path:
@@ -115,11 +133,11 @@ def make_workspace(path_ : pathlib.Path) -> pathlib.Path:
     except Exception as e:
         # 아마도 OS 에러
         path_ = str(path_)
-        err_msg  = f"Error while making directory : {path_}\n"
-        err_msg += f"dir : {os.path.dirname(path_)}"
-        err_msg += f"basename : {os.path.basename(path_)}"
+        err_msg  = f"\nError while making directory : {path_}\n"
+        err_msg += f"dir : {os.path.dirname(path_)}\n"
+        err_msg += f"basename : {os.path.basename(path_)}\n"
         err_msg += "=== trace back ===\n\n"
-        err_msg += e
+        err_msg += str(e)
         raise Exception(err_msg)
     
     return path_
@@ -133,28 +151,37 @@ def reflectIncrement(base : os.PathLike, in_folder: os.PathLike = None) -> pathl
 
     base_dir = in_folder if in_folder else (dir_ if (dir_ := os.path.dirname(base)) else os.getcwd())
     base = os.path.basename(base)
+    print(f'ssssss {base_dir=}')
+    full_path = str(pathlib.Path(base_dir, base))
 
     isFile = len(base.split('.')) >1
 
+    format_1 = "{}_{}.{}"
+    format_2 = "{}_{}"
     n = 1
     if isFile:
-        if not os.path.exists(base):
+        if not os.path.exists(full_path):
             return pathlib.Path(base_dir, base)
         bbase, ext = base.split('.')
-        while os.path.exists(f"{bbase}({n}).{ext}"):
+        # while os.path.exists(f"{bbase}_{n}.{ext}"):
+        while os.path.exists(str(pathlib.Path(base_dir, format_1.format(bbase, n, ext)))):
             n += 1
         if n:
-            return pathlib.Path(base_dir, f"{bbase}({n}).{ext}")
+            # return pathlib.Path(base_dir, f"{bbase}({n}).{ext}")
+            return pathlib.Path(base_dir, format_1.format(bbase, n, ext))
 
     if not isFile:
-        if not os.path.exists(base):
+        if not os.path.exists(full_path):
             return pathlib.Path(base_dir, base)
-        while os.path.exists(f"{base}({n})"):
+        # while os.path.exists(f"{base}({n})"):
+        while os.path.exists(str(pathlib.Path(base_dir,format_2.format(base, n)))):
             n += 1
         if n:
-            return pathlib.Path(base_dir, f"{base}({n})")
+            # return pathlib.Path(base_dir, f"{base}({n})")
+            return pathlib.Path(base_dir, format_2.format(base, n))
 
-    return pathlib.Path(base_dir+f"({n})")
+    # return pathlib.Path(base_dir+f"({n})")
+    return pathlib.Path(format_2.format(base_dir, n))
 
 def deletePath(s): # Dangerous! Watch out!
     

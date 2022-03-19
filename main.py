@@ -6,7 +6,7 @@ from scipy.io import wavfile
 import numpy as np
 import re
 import math
-
+import json
 from utils import *
 from codecs_config import *
 from args_parsing import get_args
@@ -16,9 +16,11 @@ from video_source import get_video_source
 
 TEMP = "TEMP"
 
+WORK_DIR = None
+
 def main():
     args = get_args()
-
+    make_directory(pathlib.Path(os.getcwd(), TEMP))
     ############ Setting globals ############
     '''
     Default
@@ -43,19 +45,21 @@ def main():
     FRAME_SPREADAGE = args.frame_margin
     NEW_SPEED = [args.silent_speed, args.sounded_speed]
     FRAME_QUALITY = args.frame_quality    
-
-    TEMP_FOLDER = "TEMP"
     AUDIO_FADE_ENVELOPE_SIZE = 400 # smooth out transitiion's audio by quickly fading in/out (arbitrary magic number whatever)
     
-    # exit()
-    INPUT_FILE = get_video_source(args.url, args.input_file)
+    videoSource = args.url or args.input_file 
+    videoName, INPUT_FILE = get_video_source(videoSource)
     OUTPUT_FILE = get_video_output_path(args.output_file, INPUT_FILE)
 
-    workspace_name = get_workspace_name(get_date() + '-' + TEMP_FOLDER)
-    workspace_path = make_workspace(workspace_name)
+    WORK_DIR = f"{videoName}-{get_date()}"
+    
+    WORK_DIR = get_workspace_name(WORK_DIR)
+    print(f"{WORK_DIR=}")
+    WORKSPACE_PATH = make_workspace(WORK_DIR)
 
-    TEMP_FOLDER = str(workspace_name)
-    print(f'{TEMP_FOLDER=}')
+    TEMP_FOLDER = make_workspace(str(pathlib.Path(WORK_DIR, TEMP)))
+    TEMP_NEW_FOLDER = make_workspace(str(pathlib.Path(WORK_DIR, "new" + TEMP)))
+
     ############ Logic ############
 
     """
@@ -82,7 +86,7 @@ def main():
     qscale를 1 할 때 같은 이미지 크기, 비트, 픽셀수는 같지만 용량은 157KB
     정도로 대략 3~4배 차이를 보여줌
     """
-    processtr = make_process("ffmpeg -i", INPUT_FILE, "-qscale:v", "1", pathlib.Path(TEMP_FOLDER, "frame%06d.jpg"), "-hide_banner")
+    processtr = make_process("ffmpeg -i", INPUT_FILE, "-qscale:v", str(FRAME_QUALITY), pathlib.Path(TEMP_FOLDER, "frame%06d.jpg"), "-hide_banner")
     print(f"{processtr=}")
     subprocess.call(processtr)
 
@@ -102,7 +106,7 @@ def main():
     
     오디오 비트레이트 160kb, 2 채널, 오디오 샘플링 레이트 44100.0, 비디오 없이 audio.wav 파일로 저장
     """
-    processtr = make_process("ffmpeg -i", INPUT_FILE, "-ab 160k -ac 2 -ar", str(SAMPLE_RATE), "-vn", pathlib.Path(TEMP_FOLDER, "audio.wav"))
+    processtr = make_process("ffmpeg -i", INPUT_FILE, "-ab 160k -ac 2 -ar", str(SAMPLE_RATE), "-vn", pathlib.Path(WORKSPACE_PATH, "audio.wav"))
     print(f"{processtr=}")
     subprocess.call(processtr, shell=False)
 
@@ -132,18 +136,23 @@ def main():
     그래서 args 기본값 frame_rate = 30.0 으로 계속 나오는거임
     """
 
-    processtr = make_process("ffmpeg -i", pathlib.Path(TEMP_FOLDER, "input.mp4"), "2>&1")
-    f = open(str(pathlib.Path(TEMP_FOLDER, "params.txt")), "w")
-    subprocess.call(processtr, shell=False, stdout=f)
+    processtr = make_process(
+        f"ffprobe -v quiet -print_format json -show_format -show_streams",
+        f'{INPUT_FILE}',
+        ">",
+        pathlib.Path(WORKSPACE_PATH, 'params.json')
+    )
 
-    f = open(str(pathlib.Path(TEMP_FOLDER, "params.txt")), 'r+')
-    pre_params = f.read()
-    f.close()
-    params = pre_params.split('\n')
-    for line in params:
-        m = re.search('Stream #.*Video.* ([0-9]*) fps',line)
-        if m is not None:
-            frameRate = float(m.group(1))
+    subprocess.call(processtr, shell=True)  # Why works after I changed to True?
+
+    with open(str(pathlib.Path(WORKSPACE_PATH, 'params.json')), mode='r') as fp:
+        params = json.load(fp)
+        videoInfo =  [strms for strms in params['streams'] if strms["index"] == 0][0]
+        audioInfo =  [strms for strms in params['streams'] if strms["index"] == 1][0]
+
+        # r_frame_rate -> lowest frame reate
+        # avg_frame_rate -> total frame / video duration
+        frameRate = int(videoInfo["r_frame_rate"].split("/")[0])
 
     """
     이 아래부터는 영상, 소리 작업하는 코드
@@ -163,7 +172,7 @@ def main():
     '''
 
     # (오디오 샘플 레이트), (오디오 데이터 - np.array로 되어 있음)
-    sampleRate, audioData = wavfile.read(str(pathlib.Path(TEMP_FOLDER, "audio.wav")))
+    sampleRate, audioData = wavfile.read(str(pathlib.Path(WORKSPACE_PATH, "audio.wav")))
     
     maxAudioVolume = getMaxVolume(audioData)
     audioSampleCount = audioData.shape[0]
@@ -256,8 +265,8 @@ def main():
         # chunk[0]*samplesPerFrame를 해서, 프레임 한 개 + 오디오 레이트 개수 만큼 가져오는 것
         audioChunk = audioData[int(chunk[0]*samplesPerFrame):int(chunk[1]*samplesPerFrame)]
         
-        sFile = str(pathlib.Path(TEMP_FOLDER, "tempStart.wav"))
-        eFile = str(pathlib.Path(TEMP_FOLDER, "tempEnd.wav"))
+        sFile = str(pathlib.Path(WORKSPACE_PATH, "tempStart.wav"))
+        eFile = str(pathlib.Path(WORKSPACE_PATH, "tempEnd.wav"))
 
         # 우선 start.wav을 저장함
         wavfile.write(sFile, SAMPLE_RATE, audioChunk)
@@ -320,18 +329,18 @@ def main():
             inputFrame = int(chunk[0] + NEW_SPEED[int(chunk[2])]*(outputFrame-startOutputFrame) )
 
             # 영상에 보일 새로운 프레임(이미지) 복사함
-            didItWork = copyFrame(inputFrame,outputFrame, TEMP_FOLDER)
+            didItWork = copyFrame(inputFrame,outputFrame, TEMP_FOLDER, TEMP_NEW_FOLDER)
 
             if didItWork:
                 lastExistingFrame = inputFrame
             else:
-                copyFrame(lastExistingFrame,outputFrame, TEMP_FOLDER)
+                copyFrame(lastExistingFrame,outputFrame, TEMP_FOLDER, TEMP_NEW_FOLDER)
 
         # 다음 프레임 위치 재조정
         outputPointer = endPointer
 
     # 새로 다듬은 소리 파일 위치 audioNew.wav, SAMPLE_RATE == 44100Hz, 소리 데이터(np.array) 씀
-    wavfile.write(str(pathlib.Path(TEMP_FOLDER,"audioNew.wav")),SAMPLE_RATE,outputAudioData)
+    wavfile.write(str(pathlib.Path(WORKSPACE_PATH,"audioNew.raw")),SAMPLE_RATE,outputAudioData)
 
     '''
     outputFrame = math.ceil(outputPointer/samplesPerFrame)
@@ -351,17 +360,17 @@ def main():
 
     영상 길이(초) * framerate(30fps) * (한 프레임에 들어갈 소리 샘플링 개수) 
         == 
-            (audioNew.wav 시간) * (모든 소리 샘플링 개수)
+            (audioNew.raw 시간) * (모든 소리 샘플링 개수)
     """
     processtr = make_process(
         "ffmpeg", "-framerate", str(frameRate), "-i", 
-        pathlib.Path(TEMP_FOLDER, "newFrame%06d.jpg"), "-i", 
-        pathlib.Path(TEMP_FOLDER, "audioNew.wav"), "-strict -2", OUTPUT_FILE
+        pathlib.Path(TEMP_NEW_FOLDER, "newFrame%06d.jpg"), "-i", 
+        pathlib.Path(WORKSPACE_PATH, "audioNew.raw"), "-strict -2", OUTPUT_FILE
     )
-
     subprocess.call(processtr, shell=False)
 
-    # deletePath(TEMP_FOLDER)
+    # make this another option
+    deletePath(WORKSPACE_PATH)
 
 if __name__ == '__main__':
     main()

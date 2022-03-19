@@ -127,9 +127,9 @@ class Codecs:
 
         return f"Numbers of Codec avaliable : {len(self.__Codecs.values())} Codecs : {preview}"
 
-codecs = Codecs()
-
 def current_pc_codec() -> Codecs:
+    codecs = Codecs()
+
     # FIXME : hide ffmpeg message in console ("... Copyright (c) 2000-2022 the FFmpeg developers ... ")
     out = subprocess.check_output(["ffmpeg", "-codecs"], encoding='utf-8')
 
