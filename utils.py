@@ -108,21 +108,15 @@ def get_workspace_name(path_ : os.PathLike) -> pathlib.Path:
 
     dir = dirname if (dirname := os.path.dirname(path_)) else pathlib.Path(os.getcwd(), "TEMP")
     dir = str(dir)
-    print(f"{dir=}")
-    print(f"{path_=}")
     full_path = pathlib.Path(dir, path_)
 
     if not os.path.isdir(str(full_path)):
-        print("씨빨!!!!!!! 1111111111111111111")
         return full_path
 
     if os.path.exists(str(full_path)):
-        print("씨빨!!!!!!! 2222222222222222222222222222222")
-
-        print(f"{reflectIncrement(path_, dir)=}")
+        # print(f"{reflectIncrement(path_, dir)=}")
         return pathlib.Path(dir, reflectIncrement(path_, dir))
     
-    print("씨빨!!!!!!! 33333333333")
     return pathlib.Path(dir, path_)
 
 def make_workspace(path_ : pathlib.Path) -> pathlib.Path:
@@ -151,7 +145,6 @@ def reflectIncrement(base : os.PathLike, in_folder: os.PathLike = None) -> pathl
 
     base_dir = in_folder if in_folder else (dir_ if (dir_ := os.path.dirname(base)) else os.getcwd())
     base = os.path.basename(base)
-    print(f'ssssss {base_dir=}')
     full_path = str(pathlib.Path(base_dir, base))
 
     isFile = len(base.split('.')) >1
