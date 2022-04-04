@@ -33,7 +33,7 @@ def main():
     frame_rate=30.0
 
     sample_rate=44100.0
-    silent_speed=5.0
+    silent_speed=4.0
     silent_threshold=0.03
     sounded_speed=1.0
     '''
@@ -45,9 +45,12 @@ def main():
     NEW_SPEED = [args.silent_speed, args.sounded_speed]
     FRAME_QUALITY = args.frame_quality    
     AUDIO_FADE_ENVELOPE_SIZE = 400 # smooth out transitiion's audio by quickly fading in/out (arbitrary magic number whatever)
-    
+
+
     videoSource = args.url or args.input_file 
     videoName, INPUT_FILE = get_video_source(videoSource)
+
+    # exit()
     OUTPUT_FILE = get_video_output_path(args.output_file, INPUT_FILE)
 
     WORK_DIR = f"{videoName}-{get_date()}"
@@ -62,8 +65,11 @@ def main():
 
     frameRate = get_video_info(INPUT_FILE, WORKSPACE_PATH)
     frameRate = int(frameRate)
+
     
+
     AUDIO_FADE_ENVELOPE_SIZE = int(AUDIO_FADE_ENVELOPE_SIZE * (frameRate/30))
+    print(f'{AUDIO_FADE_ENVELOPE_SIZE=}')
 
     """
     -옵션:stream_specifier
@@ -112,8 +118,6 @@ def main():
     processtr = make_process("ffmpeg -i", INPUT_FILE, "-ab 160k -ac 2 -ar", str(SAMPLE_RATE), "-vn", pathlib.Path(WORKSPACE_PATH, "audio.wav"))
     print(f"{processtr=}")
     subprocess.call(processtr, shell=False)
-
-    
 
     """
     이 아래부터는 영상, 소리 작업하는 코드
@@ -220,7 +224,17 @@ def main():
     outputPointer = 0
     lastExistingFrame = None
 
-    
+    '''
+    TODO: 
+        여기서 시간 많이 걸림 (CPU 점유율도 높지도 않고 스레드 사용안해서 많이 느림)
+        필요한 프레임만 가져와서 다른 이름으로(앞에 new 붙이는거) 복사하는 건데
+        I/O 작업이다보니 코어만 2개 이상 있으면 시간 단축 가능할 듯
+
+        소리를 단위로 chunk를 나누니깐 프레임이 "소리 chunk"에 따라 나뉘어지면 상관이 없음
+        그래서 아래 for문은 chunk가 잘못해서 절단면이 크게 일어나는 것을 고려하지 않고
+        병렬로 진행해도 큰 상관은 없을 것,
+        단 프레임 숫자 붙이기가 문제다
+    '''
     for chunk in chunks:
         # 살려야할 오디오+프레임을 프레임 기준으로 정했기 때문에
         # chunk[0]*samplesPerFrame를 해서, 프레임 한 개 + 오디오 레이트 개수 만큼 가져오는 것
@@ -300,6 +314,11 @@ def main():
         # 다음 프레임 위치 재조정
         outputPointer = endPointer
 
+    sFile = str(pathlib.Path(WORKSPACE_PATH, "tempStart.wav"))
+    eFile = str(pathlib.Path(WORKSPACE_PATH, "tempEnd.wav"))
+    os.remove(sFile)
+    os.remove(eFile)
+
     # 새로 다듬은 소리 파일 위치 audioNew.wav, SAMPLE_RATE == 44100Hz, 소리 데이터(np.array) 씀
     wavfile.write(str(pathlib.Path(WORKSPACE_PATH,"audioNew.raw")),SAMPLE_RATE,outputAudioData)
 
@@ -323,6 +342,14 @@ def main():
         == 
             (audioNew.raw 시간) * (모든 소리 샘플링 개수)
     """
+
+    # 이런 메세지가 뜬다 --> 스레드 큐 옵션 늘리기?
+    # [image2 @ 000002384582d900] Thread message queue blocking; consider raising the thread_queue_size option (current value: 8)
+    """
+    TODO:
+        이 마지막 작업이 2.2 배속으로 밖에 인코딩을 못하던데
+        이걸 H/W or GPU 가속을 할 수 있는 지 확인하는 스크립트가 필요함
+    """
     processtr = make_process(
         "ffmpeg", "-framerate", str(frameRate), "-i", 
         pathlib.Path(TEMP_NEW_FOLDER, "newFrame%06d.jpg"), "-i", 
@@ -331,7 +358,7 @@ def main():
     subprocess.call(processtr, shell=False)
 
     # make this another option
-    deletePath(WORKSPACE_PATH)
+    # deletePath(WORKSPACE_PATH)
 
 if __name__ == '__main__':
     main()
