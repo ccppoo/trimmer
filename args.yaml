@@ -61,7 +61,7 @@ options:
     type:
       float
     default:
-      4.00
+      2.00
     help:
       the speed that silent frames should be played at. 999999 for jumpcutting.
 
