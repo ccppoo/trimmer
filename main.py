@@ -66,7 +66,6 @@ def main():
     frameRate = get_video_info(INPUT_FILE, WORKSPACE_PATH)
     frameRate = int(frameRate)
 
-    
 
     AUDIO_FADE_ENVELOPE_SIZE = int(AUDIO_FADE_ENVELOPE_SIZE * (frameRate/30))
     print(f'{AUDIO_FADE_ENVELOPE_SIZE=}')
@@ -357,8 +356,8 @@ def main():
     )
     subprocess.call(processtr, shell=False)
 
-    # make this another option
-    # deletePath(WORKSPACE_PATH)
+    # 작업 공간 파일 제거
+    deletePath(WORKSPACE_PATH)
 
 if __name__ == '__main__':
     main()

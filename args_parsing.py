@@ -32,7 +32,6 @@ def get_args() -> argparse.Namespace:
         for x in codecs.decodable.video_codecs.names:
             print(f'\t{x}')
         exit()
-        
 
     parser = argparse.ArgumentParser(description='Modifies a video file to play at different speeds when there is sound vs. silence.')
     make_parser(parser)

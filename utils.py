@@ -180,7 +180,6 @@ def deletePath(s): # Dangerous! Watch out!
     
     if OS:
         pass
-    
     try:
         shutil.rmtree(s,ignore_errors=False)
     except OSError:  
